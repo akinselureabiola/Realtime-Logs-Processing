@@ -1,0 +1,10 @@
+airflow/dags/config/
+airflow/airflow.cfg
+airflow/airflow.cfg
+airflow.cfg
+.env
+simple_auth_manager_passwords.json.generated
+airflow.db
+logs/
+log_processing_venv/
+.vscode/

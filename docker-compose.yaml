@@ -1,0 +1,114 @@
+services:
+  postgres:
+    image: postgres:13
+    container_name: realtime-logs-processing-postgres-1
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "airflow" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - 'postgres-db:/var/lib/postgresql/data'
+
+  redis:
+    image: redis:6-alpine
+    container_name: realtime-logs-processing-redis-1
+    ports:
+      - "6379:6379"
+
+  # A new service to initialize the database once.
+  init-db:
+    # The image is built using the Dockerfile you provided
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: realtime-logs-processing-init-db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow@postgres/airflow
+      - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
+      - AIRFLOW__WEBSERVER__RBAC=True
+      - AIRFLOW_UID=50000
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
+    volumes:
+      # This named volume ensures your DAG files persist even when containers are removed
+      - 'dags:/opt/airflow/dags'
+    # Set the user to 'airflow' for security best practices
+    user: "${AIRFLOW_UID:-50000}:0"
+    command: ["db", "init"]
+
+  webserver:
+    # The image is built using the Dockerfile you provided
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: realtime-logs-processing-webserver-1
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow@postgres/airflow
+      - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
+      - AIRFLOW__WEBSERVER__RBAC=True
+      - AIRFLOW_UID=50000
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
+    volumes:
+      # This named volume ensures your DAG files persist even when containers are removed
+      - 'dags:/opt/airflow/dags'
+    # Set the user to 'airflow' for security best practices
+    user: "${AIRFLOW_UID:-50000}:0"
+    command: ["webserver"]
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      postgres:
+        condition: service_healthy
+      init-db:
+        condition: service_completed_successfully
+
+  scheduler:
+    # The image is built using the Dockerfile you provided
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: realtime-logs-processing-scheduler-1
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow@postgres/airflow
+      - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
+      - AIRFLOW__WEBSERVER__RBAC=True
+      - AIRFLOW_UID=50000
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
+    volumes:
+      # This named volume ensures your DAG files persist even when containers are removed
+      - 'dags:/opt/airflow/dags'
+    # Set the user to 'airflow' for security best practices
+    user: "${AIRFLOW_UID:-50000}:0"
+    command: ["scheduler"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      init-db:
+        condition: service_completed_successfully
+
+volumes:
+  postgres-db:
+  dags:

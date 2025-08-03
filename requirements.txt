@@ -1,0 +1,5 @@
+apache-airflow==2.7.1
+confluent-kafka
+Faker
+boto3
+pendulum
